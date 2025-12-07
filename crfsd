@@ -1,27 +1,29 @@
 --[[
-    RED NIGHTMARE - FINAL SUITE V6 (COORD EDITION)
+    RED NIGHTMARE - FINAL SUITE V8 (CLEAN UI FIX)
     Target Pos: -935.15, 96.93, 2035.16
-    Features: Role Logic, Smart Aim, ESP, Noclip, Return TP
+    Fix: Buttons hide properly when minimized (No overlapping/squishing)
 ]]
 
 -- SERVICIOS
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 -- VARIABLES
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local TargetPos = Vector3.new(-935.15, 96.93, 2035.16) -- COORDENADA EXACTA
+local TargetPos = Vector3.new(-935.15, 96.93, 2035.16)
 
 -- ESTADOS
 local isAimbotActive = false
 local isNoclipActive = false
 local currentTarget = nil
 local myRole = nil 
-local savedPosition = nil -- Para guardar donde estabas
-local isAtWeapons = false -- Para saber si fuiste a las armas
+local savedPosition = nil
+local isAtWeapons = false
+local isMenuOpen = true
 
 -- COLORES
 local C_BG = Color3.fromRGB(10, 5, 5)
@@ -30,16 +32,16 @@ local C_DIM = Color3.fromRGB(60, 10, 10)
 local C_TEXT = Color3.fromRGB(255, 255, 255)
 local C_POLICE = Color3.fromRGB(0, 100, 255)
 local C_PRISONER = Color3.fromRGB(255, 140, 0)
-local C_RETURN = Color3.fromRGB(255, 140, 0) -- Naranja retorno
+local C_RETURN = Color3.fromRGB(255, 140, 0)
 
 -- GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RedNightmareV6_Final"
+screenGui.Name = "RedNightmareV8_Clean"
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 screenGui.ResetOnSpawn = false
 
 -- ====================================================
--- 1. LÓGICA DE TELEPORT (IDA Y VUELTA)
+-- 1. LÓGICA DE TELEPORT
 -- ====================================================
 local function handleTeleport(btn)
     local char = LocalPlayer.Character
@@ -47,28 +49,25 @@ local function handleTeleport(btn)
     local root = char.HumanoidRootPart
 
     if not isAtWeapons then
-        -- IDA: Guardar y Viajar
         savedPosition = root.CFrame
         root.CFrame = CFrame.new(TargetPos)
-        
         isAtWeapons = true
-        btn.Text = "¿REGRESAR?"
+        btn.Text = "> RETURN TO BASE <"
         btn.BackgroundColor3 = C_RETURN
-        game.StarterGui:SetCore("SendNotification", {Title="TP DONE"; Text="Posición guardada."; Duration=2;})
+        game.StarterGui:SetCore("SendNotification", {Title="SYSTEM"; Text="Teleported to Weapons."; Duration=2;})
     else
-        -- VUELTA: Regresar a casa
         if savedPosition then
             root.CFrame = savedPosition
             isAtWeapons = false
-            btn.Text = "IR A LAS ARMAS"
-            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0) -- Verde
-            game.StarterGui:SetCore("SendNotification", {Title="RETURNED"; Text="De vuelta a la acción."; Duration=2;})
+            btn.Text = "> GET WEAPONS <"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+            game.StarterGui:SetCore("SendNotification", {Title="SYSTEM"; Text="Returned."; Duration=2;})
         end
     end
 end
 
 -- ====================================================
--- 2. LÓGICA DE ROLES (TASER CHECK)
+-- 2. LÓGICA DE ROLES
 -- ====================================================
 local function getTargetRole(model)
     local hasTaser = false
@@ -95,7 +94,6 @@ local function getValidTargets()
         if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
             if obj.Name ~= LocalPlayer.Name and obj ~= LocalPlayer.Character and obj.Humanoid.Health > 0 then
                 local targetRole, _ = getTargetRole(obj)
-                -- Lógica Inteligente: Solo agregar enemigos
                 if (myRole == "PRISIONERO" and targetRole == "POLICIA") or (myRole == "POLICIA" and targetRole == "PRISIONERO") then
                     table.insert(targets, obj)
                 end
@@ -131,7 +129,7 @@ task.spawn(function()
                 if not obj:FindFirstChild("TacESP") then
                     local hl = Instance.new("Highlight"); hl.Name="TacESP"; hl.Adornee=obj; hl.Parent=obj
                     local bg = Instance.new("BillboardGui"); bg.Name="Tag"; bg.Adornee=obj.PrimaryPart; bg.Size=UDim2.new(0,200,0,50); bg.StudsOffset=Vector3.new(0,4.5,0); bg.AlwaysOnTop=true; bg.Parent=obj.PrimaryPart
-                    local tx = Instance.new("TextLabel"); tx.Size=UDim2.new(1,0,1,0); tx.BackgroundTransparency=1; tx.Font=Enum.Font.GothamBold; tx.TextSize=10; tx.TextStrokeTransparency=0.5; tx.Parent=bg
+                    local tx = Instance.new("TextLabel"); tx.Size=UDim2.new(1,0,1,0); tx.BackgroundTransparency=1; tx.Font=Enum.Font.Code; tx.TextSize=10; tx.TextStrokeTransparency=0.8; tx.Parent=bg
                 end
                 local hl = obj:FindFirstChild("TacESP"); local bg = obj.PrimaryPart:FindFirstChild("Tag")
                 if hl and bg then
@@ -151,36 +149,65 @@ task.spawn(function()
 end)
 
 -- ====================================================
--- 5. INTERFAZ (MENU FINAL)
+-- 5. INTERFAZ (UI COMPLETA)
 -- ====================================================
-local startFrame = Instance.new("Frame"); startFrame.Size=UDim2.new(1,0,1,0); startFrame.BackgroundColor3=Color3.new(0,0,0); startFrame.BackgroundTransparency=0.3; startFrame.Parent=screenGui
-local l1 = Instance.new("TextLabel"); l1.Text="SELECT ROLE"; l1.Size=UDim2.new(1,0,0,50); l1.Position=UDim2.new(0,0,0.3,0); l1.BackgroundTransparency=1; l1.TextColor3=C_MAIN; l1.Font=Enum.Font.Code; l1.TextSize=30; l1.Parent=startFrame
-local bp = Instance.new("TextButton"); bp.Text="I AM PRISONER"; bp.Size=UDim2.new(0,200,0,60); bp.Position=UDim2.new(0.5,-210,0.5,0); bp.BackgroundColor3=C_PRISONER; bp.Parent=startFrame; Instance.new("UICorner",bp).CornerRadius=UDim.new(0,8)
-local bc = Instance.new("TextButton"); bc.Text="I AM POLICE"; bc.Size=UDim2.new(0,200,0,60); bc.Position=UDim2.new(0.5,10,0.5,0); bc.BackgroundColor3=C_POLICE; bc.TextColor3=Color3.new(1,1,1); bc.Parent=startFrame; Instance.new("UICorner",bc).CornerRadius=UDim.new(0,8)
+local startFrame = Instance.new("Frame"); startFrame.Size=UDim2.new(1,0,1,0); startFrame.BackgroundColor3=Color3.new(0,0,0); startFrame.BackgroundTransparency=0.2; startFrame.Parent=screenGui
+local l1 = Instance.new("TextLabel"); l1.Text="> SELECT_ROLE <"; l1.Size=UDim2.new(1,0,0,50); l1.Position=UDim2.new(0,0,0.3,0); l1.BackgroundTransparency=1; l1.TextColor3=C_MAIN; l1.Font=Enum.Font.Code; l1.TextSize=30; l1.Parent=startFrame
+local bp = Instance.new("TextButton"); bp.Text="[ PRISONER ]"; bp.Size=UDim2.new(0,200,0,60); bp.Position=UDim2.new(0.5,-210,0.5,0); bp.BackgroundColor3=C_PRISONER; bp.Font=Enum.Font.Code; bp.TextSize=20; bp.Parent=startFrame; Instance.new("UICorner",bp).CornerRadius=UDim.new(0,4)
+local bc = Instance.new("TextButton"); bc.Text="[ POLICE ]"; bc.Size=UDim2.new(0,200,0,60); bc.Position=UDim2.new(0.5,10,0.5,0); bc.BackgroundColor3=C_POLICE; bc.TextColor3=Color3.new(1,1,1); bc.Font=Enum.Font.Code; bc.TextSize=20; bc.Parent=startFrame; Instance.new("UICorner",bc).CornerRadius=UDim.new(0,4)
 
 local function loadMainMenu()
     startFrame:Destroy()
-    local mainFrame = Instance.new("Frame"); mainFrame.Size=UDim2.new(0,240,0,260); mainFrame.Position=UDim2.new(0.05,0,0.4,0); mainFrame.BackgroundColor3=C_BG; mainFrame.Active=true; mainFrame.Draggable=true; mainFrame.Parent=screenGui
-    Instance.new("UICorner", mainFrame).CornerRadius=UDim.new(0,8); Instance.new("UIStroke", mainFrame).Color=C_MAIN; Instance.new("UIStroke", mainFrame).Thickness=2
     
-    local t = Instance.new("TextLabel"); t.Text="TACTICAL V6"; t.Size=UDim2.new(1,0,0,30); t.BackgroundTransparency=1; t.TextColor3=C_MAIN; t.Font=Enum.Font.Code; t.TextSize=16; t.Parent=mainFrame
+    local mainFrame = Instance.new("Frame"); mainFrame.Size=UDim2.new(0,240,0,260); mainFrame.Position=UDim2.new(0.05,0,0.4,0); mainFrame.BackgroundColor3=C_BG; mainFrame.Active=true; mainFrame.Draggable=true; mainFrame.ClipsDescendants=true; mainFrame.Parent=screenGui
+    Instance.new("UICorner", mainFrame).CornerRadius=UDim.new(0,6); Instance.new("UIStroke", mainFrame).Color=C_MAIN; Instance.new("UIStroke", mainFrame).Thickness=2
+    
+    local t = Instance.new("TextLabel"); t.Text="TACTICAL V8 ["..string.sub(myRole,1,4).."]"; t.Size=UDim2.new(1,-40,0,30); t.Position=UDim2.new(0,5,0,0); t.BackgroundTransparency=1; t.TextColor3=C_MAIN; t.Font=Enum.Font.Code; t.TextSize=14; t.TextXAlignment=Enum.TextXAlignment.Left; t.Parent=mainFrame
+    
+    -- Botón Minimizar
+    local minBtn = Instance.new("TextButton"); minBtn.Size=UDim2.new(0,30,0,30); minBtn.Position=UDim2.new(1,-35,0,0); minBtn.BackgroundTransparency=1; minBtn.Text="[ - ]"; minBtn.TextColor3=C_TEXT; minBtn.Font=Enum.Font.Code; minBtn.TextSize=14; minBtn.Parent=mainFrame
+
+    -- CONTENEDOR DE BOTONES (Para ocultarlos fácil)
+    local contentFolder = Instance.new("Folder"); contentFolder.Parent = mainFrame
     
     local function mkBtn(txt, pos, col)
-        local b = Instance.new("TextButton"); b.Size=UDim2.new(0,200,0,40); b.Position=pos; b.BackgroundColor3=col; b.Text=txt; b.TextColor3=C_TEXT; b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=mainFrame; Instance.new("UICorner",b).CornerRadius=UDim.new(0,6); return b
+        local b = Instance.new("TextButton"); b.Size=UDim2.new(0,200,0,40); b.Position=pos; b.BackgroundColor3=col; b.Text=txt; b.TextColor3=C_TEXT; b.Font=Enum.Font.Code; b.TextSize=12; b.Parent=mainFrame; Instance.new("UICorner",b).CornerRadius=UDim.new(0,4); return b
     end
     
-    local aimB = mkBtn("ENABLE AIMBOT", UDim2.new(0.5,-100,0.2,0), C_DIM)
-    local nocB = mkBtn("NOCLIP: OFF", UDim2.new(0.5,-100,0.4,0), C_DIM)
-    local tpB = mkBtn("IR A LAS ARMAS", UDim2.new(0.5,-100,0.6,0), Color3.fromRGB(0, 150, 0))
-    
-    local st = Instance.new("TextLabel"); st.Text="TARGET: NONE"; st.Size=UDim2.new(1,0,0,20); st.Position=UDim2.new(0,0,0.85,0); st.BackgroundTransparency=1; st.TextColor3=Color3.fromRGB(150,150,150); st.Font=Enum.Font.Code; st.TextSize=10; st.Parent=mainFrame
-    local sw = Instance.new("TextButton"); sw.Name="SW"; sw.Size=UDim2.new(0,70,0,70); sw.Position=UDim2.new(0.8,0,0.7,0); sw.BackgroundColor3=C_MAIN; sw.Text="SWITCH"; sw.Font=Enum.Font.GothamBold; sw.Active=true; sw.Draggable=true; sw.Parent=screenGui; Instance.new("UICorner",sw).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",sw).Color=C_TEXT; Instance.new("UIStroke",sw).Thickness=2
+    local aimB = mkBtn("> ENABLE AIMBOT <", UDim2.new(0.5,-100,0.2,0), C_DIM)
+    local nocB = mkBtn("> NOCLIP: OFF <", UDim2.new(0.5,-100,0.4,0), C_DIM)
+    local tpB = mkBtn("> GET WEAPONS <", UDim2.new(0.5,-100,0.6,0), Color3.fromRGB(0, 150, 0))
+    local st = Instance.new("TextLabel"); st.Text="STATUS: WAITING"; st.Size=UDim2.new(1,0,0,20); st.Position=UDim2.new(0,0,0.85,0); st.BackgroundTransparency=1; st.TextColor3=Color3.fromRGB(150,150,150); st.Font=Enum.Font.Code; st.TextSize=10; st.Parent=mainFrame
+
+    -- Switcher
+    local sw = Instance.new("TextButton"); sw.Name="SW"; sw.Size=UDim2.new(0,60,0,60); sw.Position=UDim2.new(0.8,0,0.7,0); sw.BackgroundColor3=C_MAIN; sw.Text="SWITCH"; sw.Font=Enum.Font.Code; sw.Active=true; sw.Draggable=true; sw.Parent=screenGui; Instance.new("UICorner",sw).CornerRadius=UDim.new(0,8); Instance.new("UIStroke",sw).Color=C_TEXT; Instance.new("UIStroke",sw).Thickness=2
+
+    -- --- LÓGICA MINIMIZAR LIMPIA ---
+    minBtn.MouseButton1Click:Connect(function()
+        isMenuOpen = not isMenuOpen
+        
+        if isMenuOpen then
+            -- ABRIR: 1. Crecer marco, 2. Mostrar botones
+            mainFrame:TweenSize(UDim2.new(0,240,0,260), "Out", "Quad", 0.3, true)
+            minBtn.Text = "[ - ]"
+            
+            task.delay(0.2, function()
+                aimB.Visible = true; nocB.Visible = true; tpB.Visible = true; st.Visible = true
+            end)
+        else
+            -- CERRAR: 1. Ocultar botones, 2. Encoger marco
+            aimB.Visible = false; nocB.Visible = false; tpB.Visible = false; st.Visible = false
+            
+            mainFrame:TweenSize(UDim2.new(0,240,0,35), "Out", "Quad", 0.3, true)
+            minBtn.Text = "[ + ]"
+        end
+    end)
 
     aimB.MouseButton1Click:Connect(function()
         isAimbotActive = not isAimbotActive
-        if isAimbotActive then aimB.BackgroundColor3=C_MAIN; aimB.Text="AIMBOT ENGAGED"; if not currentTarget then selectNextTarget() end else aimB.BackgroundColor3=C_DIM; aimB.Text="ENABLE AIMBOT"; currentTarget=nil end
+        if isAimbotActive then aimB.BackgroundColor3=C_MAIN; aimB.Text="> AIMBOT ACTIVE <"; st.Text="SCANNING..." if not currentTarget then selectNextTarget() end else aimB.BackgroundColor3=C_DIM; aimB.Text="> ENABLE AIMBOT <"; currentTarget=nil; st.Text="STATUS: IDLE" end
     end)
-    nocB.MouseButton1Click:Connect(function() isNoclipActive = not isNoclipActive; nocB.Text = isNoclipActive and "NOCLIP: ACTIVE" or "NOCLIP: OFF"; nocB.BackgroundColor3 = isNoclipActive and C_MAIN or C_DIM end)
+    nocB.MouseButton1Click:Connect(function() isNoclipActive = not isNoclipActive; nocB.Text = isNoclipActive and "> NOCLIP: ON <" or "> NOCLIP: OFF <"; nocB.BackgroundColor3 = isNoclipActive and C_MAIN or C_DIM end)
     tpB.MouseButton1Click:Connect(function() handleTeleport(tpB) end)
     sw.MouseButton1Click:Connect(function() selectNextTarget(); st.Text=currentTarget and "LOCKED: "..currentTarget.Name or "NONE" end)
     
