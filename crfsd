@@ -1,96 +1,103 @@
 --[[
-    RED NIGHTMARE - TACTICAL SUITE V4
-    Features:
-    - Role Selector (Startup GUI)
-    - Smart Targeting (Enemy Only Logic)
-    - Tactical Noclip
-    - Taser Check ESP
+    RED NIGHTMARE - FINAL SUITE V6 (COORD EDITION)
+    Target Pos: -935.15, 96.93, 2035.16
+    Features: Role Logic, Smart Aim, ESP, Noclip, Return TP
 ]]
 
 -- SERVICIOS
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 -- VARIABLES
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local TargetPos = Vector3.new(-935.15, 96.93, 2035.16) -- COORDENADA EXACTA
 
--- ESTADOS DEL SISTEMA
+-- ESTADOS
 local isAimbotActive = false
 local isNoclipActive = false
 local currentTarget = nil
-local myRole = nil -- "PRISIONERO" o "POLICIA"
+local myRole = nil 
+local savedPosition = nil -- Para guardar donde estabas
+local isAtWeapons = false -- Para saber si fuiste a las armas
 
 -- COLORES
 local C_BG = Color3.fromRGB(10, 5, 5)
-local C_MAIN = Color3.fromRGB(255, 30, 30) -- Rojo
+local C_MAIN = Color3.fromRGB(255, 30, 30)
 local C_DIM = Color3.fromRGB(60, 10, 10)
 local C_TEXT = Color3.fromRGB(255, 255, 255)
-local C_POLICE = Color3.fromRGB(0, 100, 255)    -- Azul
-local C_PRISONER = Color3.fromRGB(255, 140, 0)  -- Naranja
+local C_POLICE = Color3.fromRGB(0, 100, 255)
+local C_PRISONER = Color3.fromRGB(255, 140, 0)
+local C_RETURN = Color3.fromRGB(255, 140, 0) -- Naranja retorno
 
--- GUI PRINCIPAL (Se crea vacía, se llena luego)
+-- GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RedNightmareV4"
+screenGui.Name = "RedNightmareV6_Final"
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 screenGui.ResetOnSpawn = false
 
 -- ====================================================
--- 1. DETECCIÓN DE ROLES (LÓGICA TASER)
+-- 1. LÓGICA DE TELEPORT (IDA Y VUELTA)
 -- ====================================================
+local function handleTeleport(btn)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local root = char.HumanoidRootPart
 
+    if not isAtWeapons then
+        -- IDA: Guardar y Viajar
+        savedPosition = root.CFrame
+        root.CFrame = CFrame.new(TargetPos)
+        
+        isAtWeapons = true
+        btn.Text = "¿REGRESAR?"
+        btn.BackgroundColor3 = C_RETURN
+        game.StarterGui:SetCore("SendNotification", {Title="TP DONE"; Text="Posición guardada."; Duration=2;})
+    else
+        -- VUELTA: Regresar a casa
+        if savedPosition then
+            root.CFrame = savedPosition
+            isAtWeapons = false
+            btn.Text = "IR A LAS ARMAS"
+            btn.BackgroundColor3 = Color3.fromRGB(0, 150, 0) -- Verde
+            game.StarterGui:SetCore("SendNotification", {Title="RETURNED"; Text="De vuelta a la acción."; Duration=2;})
+        end
+    end
+end
+
+-- ====================================================
+-- 2. LÓGICA DE ROLES (TASER CHECK)
+-- ====================================================
 local function getTargetRole(model)
-    -- Si tiene Taser = Policía, Si no = Prisionero
     local hasTaser = false
     if model:FindFirstChild("Taser") then hasTaser = true end
-    
-    local player = Players:GetPlayerFromCharacter(model)
-    if player and player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild("Taser") then
-        hasTaser = true
-    end
-
+    local p = Players:GetPlayerFromCharacter(model)
+    if p and p:FindFirstChild("Backpack") and p.Backpack:FindFirstChild("Taser") then hasTaser = true end
     if hasTaser then return "POLICIA", C_POLICE else return "PRISIONERO", C_PRISONER end
 end
 
 -- ====================================================
--- 2. SISTEMA DE NOCLIP
+-- 3. NOCLIP & AIMBOT
 -- ====================================================
-
 RunService.Stepped:Connect(function()
     if isNoclipActive and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") then part.CanCollide = false end
         end
     end
 end)
-
--- ====================================================
--- 3. SELECCIÓN DE OBJETIVOS (INTELIGENTE)
--- ====================================================
 
 local function getValidTargets()
     local targets = {}
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-            if obj.Name ~= LocalPlayer.Name and obj ~= LocalPlayer.Character then
-                local hum = obj.Humanoid
-                if hum.Health > 0 then
-                    -- LÓGICA INTELIGENTE:
-                    local targetRole, _ = getTargetRole(obj)
-                    
-                    -- Si soy Prisionero, SOLO busco Policías
-                    if myRole == "PRISIONERO" and targetRole == "POLICIA" then
-                        table.insert(targets, obj)
-                    
-                    -- Si soy Policía, SOLO busco Prisioneros
-                    elseif myRole == "POLICIA" and targetRole == "PRISIONERO" then
-                        table.insert(targets, obj)
-                    end
+            if obj.Name ~= LocalPlayer.Name and obj ~= LocalPlayer.Character and obj.Humanoid.Health > 0 then
+                local targetRole, _ = getTargetRole(obj)
+                -- Lógica Inteligente: Solo agregar enemigos
+                if (myRole == "PRISIONERO" and targetRole == "POLICIA") or (myRole == "POLICIA" and targetRole == "PRISIONERO") then
+                    table.insert(targets, obj)
                 end
             end
         end
@@ -101,70 +108,41 @@ end
 local function selectNextTarget()
     local targets = getValidTargets()
     if #targets == 0 then currentTarget = nil; return end
-
-    local closest = nil
-    local shortestDist = math.huge
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    
-    if myRoot then
+    local closest, shortest = nil, math.huge
+    if LocalPlayer.Character then
+        local myPos = LocalPlayer.Character.HumanoidRootPart.Position
         for _, t in pairs(targets) do
-            if t ~= currentTarget and t.PrimaryPart then
-                local dist = (myRoot.Position - t.PrimaryPart.Position).Magnitude
-                if dist < shortestDist then shortestDist = dist; closest = t end
-            end
+            local dist = (myPos - t.PrimaryPart.Position).Magnitude
+            if dist < shortest then shortest = dist; closest = t end
         end
     end
-    
     currentTarget = closest
-    if currentTarget then
-        game:GetService("StarterGui"):SetCore("SendNotification", {Title="LOCKED"; Text=currentTarget.Name; Duration=0.5;})
-    end
+    if currentTarget then game.StarterGui:SetCore("SendNotification", {Title="LOCKED"; Text=currentTarget.Name; Duration=0.5;}) end
 end
 
 -- ====================================================
 -- 4. VISUALES (ESP)
 -- ====================================================
-
 task.spawn(function()
     RunService.RenderStepped:Connect(function()
-        if not myRole then return end -- No hacer nada hasta elegir rol
-
-        -- Escanear TODOS los humanoides (incluso aliados para el ESP, aunque el Aim los ignore)
+        if not myRole then return end
         for _, obj in pairs(Workspace:GetDescendants()) do
-            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") and obj ~= LocalPlayer.Character then
-                
-                -- Crear ESP
-                if not obj:FindFirstChild("TacticalESP") then
-                    local hl = Instance.new("Highlight"); hl.Name="TacticalESP"; hl.Adornee=obj; hl.Parent=obj
-                    local bg = Instance.new("BillboardGui"); bg.Name="Tag"; bg.Adornee=obj.HumanoidRootPart; bg.Size=UDim2.new(0,200,0,50); bg.StudsOffset=Vector3.new(0,4.5,0); bg.AlwaysOnTop=true; bg.Parent=obj.HumanoidRootPart
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= LocalPlayer.Character then
+                if not obj:FindFirstChild("TacESP") then
+                    local hl = Instance.new("Highlight"); hl.Name="TacESP"; hl.Adornee=obj; hl.Parent=obj
+                    local bg = Instance.new("BillboardGui"); bg.Name="Tag"; bg.Adornee=obj.PrimaryPart; bg.Size=UDim2.new(0,200,0,50); bg.StudsOffset=Vector3.new(0,4.5,0); bg.AlwaysOnTop=true; bg.Parent=obj.PrimaryPart
                     local tx = Instance.new("TextLabel"); tx.Size=UDim2.new(1,0,1,0); tx.BackgroundTransparency=1; tx.Font=Enum.Font.GothamBold; tx.TextSize=10; tx.TextStrokeTransparency=0.5; tx.Parent=bg
                 end
-                
-                local hl = obj:FindFirstChild("TacticalESP")
-                local bg = obj.HumanoidRootPart:FindFirstChild("Tag")
-                
+                local hl = obj:FindFirstChild("TacESP"); local bg = obj.PrimaryPart:FindFirstChild("Tag")
                 if hl and bg then
                     local role, color = getTargetRole(obj)
-                    local isEnemy = false
-                    
-                    if (myRole == "PRISIONERO" and role == "POLICIA") or (myRole == "POLICIA" and role == "PRISIONERO") then
-                        isEnemy = true
-                    end
-                    
-                    -- Colores
+                    local isEnemy = ((myRole == "PRISIONERO" and role == "POLICIA") or (myRole == "POLICIA" and role == "PRISIONERO"))
                     if obj == currentTarget and isAimbotActive then
-                        hl.FillColor = C_MAIN; hl.OutlineColor = C_MAIN
-                        bg.TextLabel.Text = "[ TARGET ]\n" .. obj.Name
-                        bg.TextLabel.TextColor3 = C_MAIN
+                        hl.FillColor = C_MAIN; hl.OutlineColor = C_MAIN; bg.TextLabel.Text = "[ TARGET ]\n"..obj.Name; bg.TextLabel.TextColor3 = C_MAIN
                     elseif isEnemy then
-                        hl.FillColor = color; hl.OutlineColor = Color3.new(1,1,1)
-                        bg.TextLabel.Text = "["..role.."]\n"..obj.Name
-                        bg.TextLabel.TextColor3 = color
+                        hl.FillColor = color; hl.OutlineColor = Color3.new(1,1,1); bg.TextLabel.Text = "["..role.."]\n"..obj.Name; bg.TextLabel.TextColor3 = color
                     else
-                        -- Aliados (Transparente o color suave)
-                        hl.FillColor = Color3.fromRGB(100,100,100); hl.OutlineColor = Color3.new(0,0,0)
-                        hl.FillTransparency = 0.8
-                        bg.TextLabel.Text = "" -- No mostrar texto de aliados para limpiar pantalla
+                        hl.FillColor = Color3.fromRGB(100,100,100); hl.FillTransparency=0.8; bg.TextLabel.Text = ""
                     end
                 end
             end
@@ -173,127 +151,45 @@ task.spawn(function()
 end)
 
 -- ====================================================
--- 5. INTERFAZ DE INICIO (SELECTOR DE ROL)
+-- 5. INTERFAZ (MENU FINAL)
 -- ====================================================
-
-local startFrame = Instance.new("Frame")
-startFrame.Size = UDim2.new(1, 0, 1, 0)
-startFrame.BackgroundColor3 = Color3.new(0,0,0)
-startFrame.BackgroundTransparency = 0.3
-startFrame.Parent = screenGui
-
-local infoLabel = Instance.new("TextLabel")
-infoLabel.Text = "IDENTIFY YOURSELF"
-infoLabel.Size = UDim2.new(1, 0, 0, 50)
-infoLabel.Position = UDim2.new(0, 0, 0.3, 0)
-infoLabel.BackgroundTransparency = 1
-infoLabel.TextColor3 = C_MAIN
-infoLabel.Font = Enum.Font.Code
-infoLabel.TextSize = 30
-infoLabel.Parent = startFrame
-
-local btnPris = Instance.new("TextButton")
-btnPris.Text = "I AM PRISONER"
-btnPris.Size = UDim2.new(0, 200, 0, 60)
-btnPris.Position = UDim2.new(0.5, -210, 0.5, 0)
-btnPris.BackgroundColor3 = C_PRISONER
-btnPris.Font = Enum.Font.GothamBold; btnPris.TextSize = 18; btnPris.Parent = startFrame
-Instance.new("UICorner", btnPris).CornerRadius = UDim.new(0, 8)
-
-local btnPol = Instance.new("TextButton")
-btnPol.Text = "I AM POLICE"
-btnPol.Size = UDim2.new(0, 200, 0, 60)
-btnPol.Position = UDim2.new(0.5, 10, 0.5, 0)
-btnPol.BackgroundColor3 = C_POLICE
-btnPol.TextColor3 = Color3.new(1,1,1)
-btnPol.Font = Enum.Font.GothamBold; btnPol.TextSize = 18; btnPol.Parent = startFrame
-Instance.new("UICorner", btnPol).CornerRadius = UDim.new(0, 8)
-
--- ====================================================
--- 6. INTERFAZ PRINCIPAL (MAIN MENU)
--- ====================================================
+local startFrame = Instance.new("Frame"); startFrame.Size=UDim2.new(1,0,1,0); startFrame.BackgroundColor3=Color3.new(0,0,0); startFrame.BackgroundTransparency=0.3; startFrame.Parent=screenGui
+local l1 = Instance.new("TextLabel"); l1.Text="SELECT ROLE"; l1.Size=UDim2.new(1,0,0,50); l1.Position=UDim2.new(0,0,0.3,0); l1.BackgroundTransparency=1; l1.TextColor3=C_MAIN; l1.Font=Enum.Font.Code; l1.TextSize=30; l1.Parent=startFrame
+local bp = Instance.new("TextButton"); bp.Text="I AM PRISONER"; bp.Size=UDim2.new(0,200,0,60); bp.Position=UDim2.new(0.5,-210,0.5,0); bp.BackgroundColor3=C_PRISONER; bp.Parent=startFrame; Instance.new("UICorner",bp).CornerRadius=UDim.new(0,8)
+local bc = Instance.new("TextButton"); bc.Text="I AM POLICE"; bc.Size=UDim2.new(0,200,0,60); bc.Position=UDim2.new(0.5,10,0.5,0); bc.BackgroundColor3=C_POLICE; bc.TextColor3=Color3.new(1,1,1); bc.Parent=startFrame; Instance.new("UICorner",bc).CornerRadius=UDim.new(0,8)
 
 local function loadMainMenu()
-    startFrame:Destroy() -- Borrar selector
+    startFrame:Destroy()
+    local mainFrame = Instance.new("Frame"); mainFrame.Size=UDim2.new(0,240,0,260); mainFrame.Position=UDim2.new(0.05,0,0.4,0); mainFrame.BackgroundColor3=C_BG; mainFrame.Active=true; mainFrame.Draggable=true; mainFrame.Parent=screenGui
+    Instance.new("UICorner", mainFrame).CornerRadius=UDim.new(0,8); Instance.new("UIStroke", mainFrame).Color=C_MAIN; Instance.new("UIStroke", mainFrame).Thickness=2
     
-    -- Marco Principal
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 240, 0, 200) -- Más alto para el Noclip
-    mainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
-    mainFrame.BackgroundColor3 = C_BG
-    mainFrame.Active = true; mainFrame.Draggable = true; mainFrame.Parent = screenGui
-    Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
-    Instance.new("UIStroke", mainFrame).Color = C_MAIN; Instance.new("UIStroke", mainFrame).Thickness = 2
+    local t = Instance.new("TextLabel"); t.Text="TACTICAL V6"; t.Size=UDim2.new(1,0,0,30); t.BackgroundTransparency=1; t.TextColor3=C_MAIN; t.Font=Enum.Font.Code; t.TextSize=16; t.Parent=mainFrame
     
-    -- Titulo
-    local title = Instance.new("TextLabel")
-    title.Text = "TACTICAL V4 ("..string.sub(myRole, 1, 4)..")"
-    title.Size = UDim2.new(1,0,0,30); title.BackgroundTransparency=1; title.TextColor3=C_MAIN; title.Font=Enum.Font.Code; title.TextSize=16; title.Parent=mainFrame
+    local function mkBtn(txt, pos, col)
+        local b = Instance.new("TextButton"); b.Size=UDim2.new(0,200,0,40); b.Position=pos; b.BackgroundColor3=col; b.Text=txt; b.TextColor3=C_TEXT; b.Font=Enum.Font.GothamBold; b.TextSize=12; b.Parent=mainFrame; Instance.new("UICorner",b).CornerRadius=UDim.new(0,6); return b
+    end
     
-    -- Botón Aimbot
-    local aimBtn = Instance.new("TextButton")
-    aimBtn.Size = UDim2.new(0, 200, 0, 45); aimBtn.Position = UDim2.new(0.5, -100, 0.25, 0); aimBtn.BackgroundColor3 = C_DIM; aimBtn.Text = "ENABLE AIMBOT"; aimBtn.TextColor3 = C_TEXT; aimBtn.Font = Enum.Font.GothamBold; aimBtn.TextSize = 12; aimBtn.Parent = mainFrame
-    Instance.new("UICorner", aimBtn).CornerRadius = UDim.new(0, 6)
+    local aimB = mkBtn("ENABLE AIMBOT", UDim2.new(0.5,-100,0.2,0), C_DIM)
+    local nocB = mkBtn("NOCLIP: OFF", UDim2.new(0.5,-100,0.4,0), C_DIM)
+    local tpB = mkBtn("IR A LAS ARMAS", UDim2.new(0.5,-100,0.6,0), Color3.fromRGB(0, 150, 0))
     
-    -- Botón Noclip
-    local noclipBtn = Instance.new("TextButton")
-    noclipBtn.Size = UDim2.new(0, 200, 0, 45); noclipBtn.Position = UDim2.new(0.5, -100, 0.55, 0); noclipBtn.BackgroundColor3 = C_DIM; noclipBtn.Text = "NOCLIP: OFF"; noclipBtn.TextColor3 = C_TEXT; noclipBtn.Font = Enum.Font.GothamBold; noclipBtn.TextSize = 12; noclipBtn.Parent = mainFrame
-    Instance.new("UICorner", noclipBtn).CornerRadius = UDim.new(0, 6)
+    local st = Instance.new("TextLabel"); st.Text="TARGET: NONE"; st.Size=UDim2.new(1,0,0,20); st.Position=UDim2.new(0,0,0.85,0); st.BackgroundTransparency=1; st.TextColor3=Color3.fromRGB(150,150,150); st.Font=Enum.Font.Code; st.TextSize=10; st.Parent=mainFrame
+    local sw = Instance.new("TextButton"); sw.Name="SW"; sw.Size=UDim2.new(0,70,0,70); sw.Position=UDim2.new(0.8,0,0.7,0); sw.BackgroundColor3=C_MAIN; sw.Text="SWITCH"; sw.Font=Enum.Font.GothamBold; sw.Active=true; sw.Draggable=true; sw.Parent=screenGui; Instance.new("UICorner",sw).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",sw).Color=C_TEXT; Instance.new("UIStroke",sw).Thickness=2
 
-    -- Estado
-    local status = Instance.new("TextLabel")
-    status.Text = "TARGET: NONE"; status.Size=UDim2.new(1,0,0,20); status.Position=UDim2.new(0,0,0.85,0); status.BackgroundTransparency=1; status.TextColor3=Color3.fromRGB(150,150,150); status.Font=Enum.Font.Code; status.TextSize=10; status.Parent=mainFrame
-
-    -- Botón Switcher Flotante
-    local swBtn = Instance.new("TextButton"); swBtn.Name="SW"; swBtn.Size=UDim2.new(0,70,0,70); swBtn.Position=UDim2.new(0.8,0,0.7,0); swBtn.BackgroundColor3=C_MAIN; swBtn.Text="SWITCH"; swBtn.Font=Enum.Font.GothamBold; swBtn.Active=true; swBtn.Draggable=true; swBtn.Parent=screenGui
-    Instance.new("UICorner", swBtn).CornerRadius=UDim.new(1,0); Instance.new("UIStroke", swBtn).Color=C_TEXT; Instance.new("UIStroke", swBtn).Thickness=2
-
-    -- LOGICA BOTONES
-    aimBtn.MouseButton1Click:Connect(function()
+    aimB.MouseButton1Click:Connect(function()
         isAimbotActive = not isAimbotActive
-        if isAimbotActive then
-            aimBtn.BackgroundColor3 = C_MAIN; aimBtn.Text = "AIMBOT ENGAGED"; status.Text = "SCANNING ENEMIES..."
-            if not currentTarget then selectNextTarget() end
-        else
-            aimBtn.BackgroundColor3 = C_DIM; aimBtn.Text = "ENABLE AIMBOT"; status.Text = "TARGET: NONE"; currentTarget = nil
-        end
+        if isAimbotActive then aimB.BackgroundColor3=C_MAIN; aimB.Text="AIMBOT ENGAGED"; if not currentTarget then selectNextTarget() end else aimB.BackgroundColor3=C_DIM; aimB.Text="ENABLE AIMBOT"; currentTarget=nil end
     end)
+    nocB.MouseButton1Click:Connect(function() isNoclipActive = not isNoclipActive; nocB.Text = isNoclipActive and "NOCLIP: ACTIVE" or "NOCLIP: OFF"; nocB.BackgroundColor3 = isNoclipActive and C_MAIN or C_DIM end)
+    tpB.MouseButton1Click:Connect(function() handleTeleport(tpB) end)
+    sw.MouseButton1Click:Connect(function() selectNextTarget(); st.Text=currentTarget and "LOCKED: "..currentTarget.Name or "NONE" end)
     
-    noclipBtn.MouseButton1Click:Connect(function()
-        isNoclipActive = not isNoclipActive
-        if isNoclipActive then
-            noclipBtn.BackgroundColor3 = C_MAIN; noclipBtn.Text = "NOCLIP: ACTIVE"; noclipBtn.TextColor3 = Color3.new(0,0,0)
-        else
-            noclipBtn.BackgroundColor3 = C_DIM; noclipBtn.Text = "NOCLIP: OFF"; noclipBtn.TextColor3 = C_TEXT
-        end
-    end)
-    
-    swBtn.MouseButton1Click:Connect(function()
-        selectNextTarget()
-        status.Text = currentTarget and "LOCKED: "..currentTarget.Name or "NONE"
-    end)
-    
-    -- Loop Aimbot
     RunService.RenderStepped:Connect(function()
-        if isAimbotActive and currentTarget and currentTarget:FindFirstChild("Head") then
-            if currentTarget.Humanoid.Health <= 0 then selectNextTarget(); return end
+        if isAimbotActive and currentTarget and currentTarget:FindFirstChild("Head") and currentTarget.Humanoid.Health>0 then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, currentTarget.Head.Position)
         end
     end)
 end
 
--- ====================================================
--- 7. EVENTOS DE INICIO
--- ====================================================
-
-btnPris.MouseButton1Click:Connect(function()
-    myRole = "PRISIONERO"
-    loadMainMenu()
-    game.StarterGui:SetCore("SendNotification", {Title="ROLE SET"; Text="Hunting Police..."; Duration=3;})
-end)
-
-btnPol.MouseButton1Click:Connect(function()
-    myRole = "POLICIA"
-    loadMainMenu()
-    game.StarterGui:SetCore("SendNotification", {Title="ROLE SET"; Text="Hunting Prisoners..."; Duration=3;})
-end)
+bp.MouseButton1Click:Connect(function() myRole="PRISIONERO"; loadMainMenu() end)
+bc.MouseButton1Click:Connect(function() myRole="POLICIA"; loadMainMenu() end)
