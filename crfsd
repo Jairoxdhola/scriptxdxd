@@ -1,7 +1,8 @@
 --[[
-    RED NIGHTMARE - FINAL SUITE V8 (CLEAN UI FIX)
+    RED NIGHTMARE - FINAL SUITE V8.5 (AUTO-SWITCH ADDED)
     Target Pos: -935.15, 96.93, 2035.16
-    Fix: Buttons hide properly when minimized (No overlapping/squishing)
+    Update: Aimbot now switches targets automatically on kill.
+    UI: Clean Minimize Fix (Unchanged)
 ]]
 
 -- SERVICIOS
@@ -36,7 +37,7 @@ local C_RETURN = Color3.fromRGB(255, 140, 0)
 
 -- GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RedNightmareV8_Clean"
+screenGui.Name = "RedNightmareV8_AutoSwitch"
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 screenGui.ResetOnSpawn = false
 
@@ -162,7 +163,7 @@ local function loadMainMenu()
     local mainFrame = Instance.new("Frame"); mainFrame.Size=UDim2.new(0,240,0,260); mainFrame.Position=UDim2.new(0.05,0,0.4,0); mainFrame.BackgroundColor3=C_BG; mainFrame.Active=true; mainFrame.Draggable=true; mainFrame.ClipsDescendants=true; mainFrame.Parent=screenGui
     Instance.new("UICorner", mainFrame).CornerRadius=UDim.new(0,6); Instance.new("UIStroke", mainFrame).Color=C_MAIN; Instance.new("UIStroke", mainFrame).Thickness=2
     
-    local t = Instance.new("TextLabel"); t.Text="TACTICAL V8 ["..string.sub(myRole,1,4).."]"; t.Size=UDim2.new(1,-40,0,30); t.Position=UDim2.new(0,5,0,0); t.BackgroundTransparency=1; t.TextColor3=C_MAIN; t.Font=Enum.Font.Code; t.TextSize=14; t.TextXAlignment=Enum.TextXAlignment.Left; t.Parent=mainFrame
+    local t = Instance.new("TextLabel"); t.Text="TACTICAL V8.5 ["..string.sub(myRole,1,4).."]"; t.Size=UDim2.new(1,-40,0,30); t.Position=UDim2.new(0,5,0,0); t.BackgroundTransparency=1; t.TextColor3=C_MAIN; t.Font=Enum.Font.Code; t.TextSize=14; t.TextXAlignment=Enum.TextXAlignment.Left; t.Parent=mainFrame
     
     -- Botón Minimizar
     local minBtn = Instance.new("TextButton"); minBtn.Size=UDim2.new(0,30,0,30); minBtn.Position=UDim2.new(1,-35,0,0); minBtn.BackgroundTransparency=1; minBtn.Text="[ - ]"; minBtn.TextColor3=C_TEXT; minBtn.Font=Enum.Font.Code; minBtn.TextSize=14; minBtn.Parent=mainFrame
@@ -205,15 +206,37 @@ local function loadMainMenu()
 
     aimB.MouseButton1Click:Connect(function()
         isAimbotActive = not isAimbotActive
-        if isAimbotActive then aimB.BackgroundColor3=C_MAIN; aimB.Text="> AIMBOT ACTIVE <"; st.Text="SCANNING..." if not currentTarget then selectNextTarget() end else aimB.BackgroundColor3=C_DIM; aimB.Text="> ENABLE AIMBOT <"; currentTarget=nil; st.Text="STATUS: IDLE" end
+        if isAimbotActive then 
+            aimB.BackgroundColor3=C_MAIN
+            aimB.Text="> AIMBOT ACTIVE <"
+            st.Text="SCANNING..." 
+            if not currentTarget then selectNextTarget() end 
+        else 
+            aimB.BackgroundColor3=C_DIM
+            aimB.Text="> ENABLE AIMBOT <"
+            currentTarget=nil
+            st.Text="STATUS: IDLE" 
+        end
     end)
     nocB.MouseButton1Click:Connect(function() isNoclipActive = not isNoclipActive; nocB.Text = isNoclipActive and "> NOCLIP: ON <" or "> NOCLIP: OFF <"; nocB.BackgroundColor3 = isNoclipActive and C_MAIN or C_DIM end)
     tpB.MouseButton1Click:Connect(function() handleTeleport(tpB) end)
     sw.MouseButton1Click:Connect(function() selectNextTarget(); st.Text=currentTarget and "LOCKED: "..currentTarget.Name or "NONE" end)
     
+    -- === LOGICA AUTO-AIMBOT ===
     RunService.RenderStepped:Connect(function()
-        if isAimbotActive and currentTarget and currentTarget:FindFirstChild("Head") and currentTarget.Humanoid.Health>0 then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, currentTarget.Head.Position)
+        if isAimbotActive then
+            -- Si el objetivo actual es válido y está vivo
+            if currentTarget and currentTarget:FindFirstChild("Head") and currentTarget:FindFirstChild("Humanoid") and currentTarget.Humanoid.Health > 0 then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, currentTarget.Head.Position)
+            else
+                -- Si murió o no existe, AUTO-SWITCH
+                selectNextTarget()
+                if currentTarget then
+                    st.Text = "AUTO-SWITCH: " .. currentTarget.Name
+                else
+                    st.Text = "SCANNING..."
+                end
+            end
         end
     end)
 end
